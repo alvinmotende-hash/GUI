@@ -11,18 +11,28 @@ import javafx.stage.Stage;
 
 public class Main extends Application {
 
-    // Inner Data Model for Tasks
+    // Inner Data Model for Tasks (Updated with Database ID)
     public static class Task {
+        private int id;
         private final String title;
         private final String category;
         private boolean completed;
 
+        // Constructor for new tasks created in UI (ID assigned by DB later)
         public Task(String title, String category) {
-            this.title = title;
-            this.category = category;
-            this.completed = false;
+            this(-1, title, category, false);
         }
 
+        // Constructor for tasks loaded from Database
+        public Task(int id, String title, String category, boolean completed) {
+            this.id = id;
+            this.title = title;
+            this.category = category;
+            this.completed = completed;
+        }
+
+        public int getId() { return id; }
+        public void setId(int id) { this.id = id; }
         public String getTitle() { return title; }
         public String getCategory() { return category; }
         public boolean isCompleted() { return completed; }
@@ -41,6 +51,12 @@ public class Main extends Application {
 
     @Override
     public void start(Stage stage) {
+        // 1. Initialize SQLite Database & Table
+        DatabaseHandler.initializeDatabase();
+
+        // 2. Load existing tasks from SQLite into ObservableList
+        tasks.addAll(DatabaseHandler.loadTasks());
+
         TabPane tabPane = new TabPane();
         tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
@@ -55,6 +71,9 @@ public class Main extends Application {
         stage.setTitle("JavaFX Productivity Dashboard");
         stage.setScene(scene);
         stage.show();
+
+        // Initial metrics calculation for loaded tasks
+        updateMetrics();
     }
 
     // Tab 1: Task Management View
@@ -83,11 +102,16 @@ public class Main extends Application {
         progressBar.setMaxWidth(Double.MAX_VALUE);
         progressLabel = new Label("Completion: 0%");
 
-        // Action Handlers
+        // Action Handlers with SQLite Integration
         addButton.setOnAction(e -> {
             String title = taskInput.getText().trim();
             if (!title.isEmpty()) {
-                tasks.add(new Task(title, categoryBox.getValue()));
+                Task newTask = new Task(title, categoryBox.getValue());
+                
+                // Save to SQLite database (assigns generated ID to newTask)
+                DatabaseHandler.addTask(newTask);
+
+                tasks.add(newTask);
                 taskInput.clear();
                 updateMetrics();
             }
@@ -97,6 +121,10 @@ public class Main extends Application {
             Task selected = listView.getSelectionModel().getSelectedItem();
             if (selected != null) {
                 selected.setCompleted(!selected.isCompleted());
+                
+                // Update completion status in SQLite
+                DatabaseHandler.updateTaskStatus(selected.getId(), selected.isCompleted());
+
                 listView.refresh();
                 updateMetrics();
             }
@@ -105,6 +133,9 @@ public class Main extends Application {
         deleteButton.setOnAction(e -> {
             Task selected = listView.getSelectionModel().getSelectedItem();
             if (selected != null) {
+                // Delete task from SQLite
+                DatabaseHandler.deleteTask(selected.getId());
+
                 tasks.remove(selected);
                 updateMetrics();
             }
